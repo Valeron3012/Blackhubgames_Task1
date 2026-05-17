@@ -1,0 +1,68 @@
+#include <vector>
+#include <cstdint>
+
+class Solution {
+public:
+    int numIslands(std::vector<uint32_t>& grid, int m, int n) {
+        if (m <= 0 || n <= 0) return 0;
+        uint32_t* __restrict data = grid.data();
+        const int total = m * n;
+
+        // Динамический массив эквивалентностей. 
+        // Размер растёт только до кол-ва созданных меток (обычно << total/2).
+        // Избегаем std::iota на 10^10 элементов (экономия ~300 мс).
+        std::vector<uint32_t> parent;
+        parent.reserve(total / 2 + 2);
+        parent.push_back(0); // dummy for label 0
+
+        auto find = [&](uint32_t x) __attribute__((always_inline)) {
+            while (parent[x] != x) {
+                parent[x] = parent[parent[x]]; // Path halving
+                x = parent[x];
+            }
+            return x;
+        };
+
+        uint32_t label = 0;
+        
+        // PASS 1: Присваиваем метки и объединяем эквивалентные
+        for (int r = 0; r < m; ++r) {
+            for (int c = 0; c < n; ++c) {
+                int idx = r * n + c;
+                if (data[idx] != 1) continue;
+
+                bool up   = (r > 0 && data[idx - n] > 1);
+                bool left = (c > 0 && data[idx - 1] > 1);
+
+                if (!up && !left) {
+                    ++label;
+                    parent.push_back(label);
+                    data[idx] = label;
+                } 
+                else if (up && !left) {
+                    data[idx] = data[idx - n];
+                } 
+                else if (!up && left) {
+                    data[idx] = data[idx - 1];
+                } 
+                else {
+                    uint32_t rootUp   = find(data[idx - n]);
+                    uint32_t rootLeft = find(data[idx - 1]);
+                    if (rootUp != rootLeft) {
+                        // Union by index (быстрее ранга на практике)
+                        if (rootUp < rootLeft) parent[rootLeft] = rootUp;
+                        else parent[rootUp] = rootLeft;
+                    }
+                    data[idx] = rootUp;
+                }
+            }
+        }
+
+        // PASS 2: Считаем уникальные корни (острова)
+        int islands = 0;
+        for (uint32_t l = 1; l <= label; ++l) {
+            if (parent[l] == l) ++islands;
+        }
+        return islands;
+    }
+};
