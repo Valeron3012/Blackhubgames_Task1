@@ -1,6 +1,7 @@
 ﻿#include <vector>
 #include <algorithm>
 #include <cstdint>
+#include <iostream>
 
 class Solution {
 public:
