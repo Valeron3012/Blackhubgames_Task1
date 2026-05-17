@@ -5,60 +5,69 @@ class Solution {
 public:
     int numIslands(std::vector<uint32_t>& grid, int m, int n) {
         if (m <= 0 || n <= 0) return 0;
+        
+        // __restrict сообщает компилятору, что data не алиасится с parent
         uint32_t* __restrict data = grid.data();
         const int total = m * n;
 
-        // Динамический массив эквивалентностей. 
-        // Размер растёт только до кол-ва созданных меток (обычно << total/2).
-        // Избегаем std::iota на 10^10 элементов (экономия ~300 мс).
+        // Union-Find: индекс = метка, значение = родительская метка
         std::vector<uint32_t> parent;
-        parent.reserve(total / 2 + 2);
-        parent.push_back(0); // dummy for label 0
+        parent.reserve(total / 10 + 10); // Эвристика: островов обычно << N*M
+        parent.push_back(0); // 0-й индекс не используется
 
-        auto find = [&](uint32_t x) __attribute__((always_inline)) {
+        uint32_t label = 0;
+
+        // Find с path halving (быстрее полного сжатия на практике)
+        auto find = [&](uint32_t x) -> uint32_t {
             while (parent[x] != x) {
-                parent[x] = parent[parent[x]]; // Path halving
+                parent[x] = parent[parent[x]];
                 x = parent[x];
             }
             return x;
         };
 
-        uint32_t label = 0;
-        
-        // PASS 1: Присваиваем метки и объединяем эквивалентные
+        // Union двух меток
+        auto unite = [&](uint32_t a, uint32_t b) {
+            uint32_t ra = find(a), rb = find(b);
+            if (ra != rb) {
+                // Привязываем больший корень к меньшему (детерминировано, без рангов)
+                if (ra < rb) parent[rb] = ra;
+                else parent[ra] = rb;
+            }
+        };
+
+        // PASS 1: Присваиваем метки
         for (int r = 0; r < m; ++r) {
             for (int c = 0; c < n; ++c) {
                 int idx = r * n + c;
-                if (data[idx] != 1) continue;
+                if (data[idx] == 0) continue;
 
-                bool up   = (r > 0 && data[idx - n] > 1);
-                bool left = (c > 0 && data[idx - 1] > 1);
+                uint32_t up   = (r > 0) ? data[idx - n] : 0;
+                uint32_t left = (c > 0) ? data[idx - 1] : 0;
 
-                if (!up && !left) {
+                if (up == 0 && left == 0) {
+                    // Новый остров
                     ++label;
-                    parent.push_back(label);
+                    parent.push_back(label); // parent[label] = label
                     data[idx] = label;
                 } 
-                else if (up && !left) {
-                    data[idx] = data[idx - n];
+                else if (up != 0 && left == 0) {
+                    data[idx] = up;
                 } 
-                else if (!up && left) {
-                    data[idx] = data[idx - 1];
+                else if (up == 0 && left != 0) {
+                    data[idx] = left;
                 } 
                 else {
-                    uint32_t rootUp   = find(data[idx - n]);
-                    uint32_t rootLeft = find(data[idx - 1]);
-                    if (rootUp != rootLeft) {
-                        // Union by index (быстрее ранга на практике)
-                        if (rootUp < rootLeft) parent[rootLeft] = rootUp;
-                        else parent[rootUp] = rootLeft;
-                    }
-                    data[idx] = rootUp;
+                    // Оба соседа есть: берём минимальную метку и объединяем
+                    uint32_t rootUp   = find(up);
+                    uint32_t rootLeft = find(left);
+                    data[idx] = (rootUp < rootLeft) ? rootUp : rootLeft;
+                    unite(rootUp, rootLeft);
                 }
             }
         }
 
-        // PASS 2: Считаем уникальные корни (острова)
+        // PASS 2: Считаем уникальные корни
         int islands = 0;
         for (uint32_t l = 1; l <= label; ++l) {
             if (parent[l] == l) ++islands;
