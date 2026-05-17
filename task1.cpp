@@ -49,3 +49,15 @@ public:
         return islands;
     }
 };
+
+int main() {
+    // 1 1 0 0
+    // 0 1 0 1
+    // 0 0 1 1
+    std::vector<uint32_t> grid = {1,1,0,0, 0,1,0,1, 0,0,1,1};
+    int m = 3;
+    int n = 4;
+
+    std::cout << Solution{}.numIslands(grid, m, n) << "\n";
+    return 0;
+}
