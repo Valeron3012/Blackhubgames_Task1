@@ -1,51 +1,75 @@
 #include <vector>
 #include <cstdint>
+#include <numeric> // for iota
 
 class Solution {
 public:
     int numIslands(std::vector<uint32_t>& grid, int m, int n) {
         if (m <= 0 || n <= 0) return 0;
+        
         const int total = m * n;
-        int islands = 0;
-        uint32_t* data = grid.data();
+        const uint32_t* data = grid.data();
+        
+        // Union-Find структура
+        // parent[i] хранит родителя узла i. Изначально каждый сам себе родитель.
+        std::vector<int> parent(total);
+        std::iota(parent.begin(), parent.end(), 0);
+        
+        // Функция Find с полным сжатием путей (path compression)
+        // Инлайнинг критичен для скорости
+        auto find = [&](int x) {
+            while (parent[x] != x) {
+                parent[x] = parent[parent[x]]; // Path halving (быстрее полного сжатия на практике)
+                x = parent[x];
+            }
+            return x;
+        };
+        
+        // Функция Union
+        auto unite = [&](int x, int y) {
+            int rootX = find(x);
+            int rootY = find(y);
+            if (rootX != rootY) {
+                parent[rootX] = rootY;
+            }
+        };
 
-        // Стек хранит координаты в виде: (row << 16) | col
-        // uint32_t гарантирует 4 байта, битовые операции вместо деления
-        uint32_t* stk = new uint32_t[total];
-        int top = 0;
-
-        for (int i = 0; i < total; ++i) {
-            if (data[i] != 1) continue;
-            ++islands;
-            data[i] = 0;
-            stk[top++] = (static_cast<uint32_t>(i / n) << 16) | (i % n);
-
-            while (top > 0) {
-                uint32_t val = stk[--top];
-                int r = val >> 16;
-                int c = val & 0xFFFF;
-                int base = r * n + c;
-
-                // Порядок: Right → Down → Left → Up (оптимизация под LIFO и кэш)
-                if (c + 1 < n) { 
-                    int idx = base + 1; 
-                    if (data[idx] == 1) { data[idx] = 0; stk[top++] = (val & 0xFFFF0000) | (c + 1); } 
+        // --- PASS 1: Labeling ---
+        // Проходим по каждой ячейке
+        for (int r = 0; r < m; ++r) {
+            for (int c = 0; c < n; ++c) {
+                int idx = r * n + c;
+                
+                // Если вода - пропускаем (метка не нужна, но можно пометить как -1 для ясности, 
+                // но здесь мы просто игнорируем water в union-find)
+                if (data[idx] == 0) {
+                    parent[idx] = -1; // Маркер воды
+                    continue;
                 }
-                if (r + 1 < m) { 
-                    int idx = base + n; 
-                    if (data[idx] == 1) { data[idx] = 0; stk[top++] = ((r + 1) << 16) | (val & 0xFFFF); } 
+                
+                // Проверяем соседа СВЕРХУ (Up)
+                if (r > 0 && data[idx - n] == 1) {
+                    unite(idx, idx - n);
                 }
-                if (c > 0) {     
-                    int idx = base - 1; 
-                    if (data[idx] == 1) { data[idx] = 0; stk[top++] = (val & 0xFFFF0000) | (c - 1); } 
-                }
-                if (r > 0) {     
-                    int idx = base - n; 
-                    if (data[idx] == 1) { data[idx] = 0; stk[top++] = ((r - 1) << 16) | (val & 0xFFFF); } 
+                
+                // Проверяем соседа СЛЕВА (Left)
+                // Важно: если есть и Верх, и Лево, они объединятся транзитивно через текущий узел
+                if (c > 0 && data[idx - 1] == 1) {
+                    unite(idx, idx - 1);
                 }
             }
         }
-        delete[] stk;
-        return islands;
+
+        // --- PASS 2: Counting Unique Roots ---
+        int islands = 0;
+        for (int i = 0; i < total; ++i) {
+            // Если это земля и она является своим собственным корнем (представителем компонента)
+            if (parent[i] != -1 && find(i) == i) {
+                ++islands;
+            }
+        }
+        
+        return islands
+;
     }
 };
